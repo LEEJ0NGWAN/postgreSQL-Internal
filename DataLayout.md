@@ -72,11 +72,13 @@ PostgreSQL에서 데이터를 파일에 저장할 때 사용하는 고정크기(
 테이블, 인덱스 파일에서 사용하는 공통적인 구조  
 테이블, 인덱스(B-Tree ...) 등 타입이나 데이터 접근 방식(Access Method)에 따라 페이지 레이아웃의 내용이 다르게 채워진다
 
-![page_layout](./page_layout.png)
+![page_layout](./page_layout.png)  
+[image reference](https://en.wikibooks.org/wiki/PostgreSQL/Page_Layout)
 
 ## Table File Layout
 
-![table_file_layout](./table_file_layout.png)
+![table_file_layout](./table_file_layout.png)  
+[image reference](https://m-abdullahi.com/postgresql-internal-part-1/)
 
 테이블 파일 레이아웃의 경우, special space를 활용하지 않음
 
@@ -87,7 +89,8 @@ PostgreSQL에서 데이터를 파일에 저장할 때 사용하는 고정크기(
 
 ### 읽기
 
-![table_scan](./table_scan.png)
+![table_scan](./table_scan.png)  
+[image reference](https://muatik.medium.com/notes-on-postgresql-internals-4050340c9f4f)
 
 - Sequential scan: 테이블 파일만 활용하여 순차적으로 튜플 스캔
 - Index scan: 인덱스 파일에서 대상이 되는 데이터의 인덱스 튜플 추출 및 테이블 파일의 튜플을 바로 스캔
