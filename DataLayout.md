@@ -1,4 +1,4 @@
-[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQLTutorial)
+[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQL-Internal)
 
 # Database Cluster
 하나의 PostgreSQL 서버가 관리하는 데이터베이스들의 모음

@@ -1,4 +1,4 @@
-[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQLTutorial)
+[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQL-Internal)
 
 # Client-Server 모델
 PostgreSQL은 클라이언트-서버 모델을 사용  

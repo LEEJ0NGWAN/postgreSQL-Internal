@@ -1,4 +1,4 @@
-[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQLTutorial)
+[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQL-Internal)
 
 # Query Processing
 백엔드 프로세스가 자신이 담당하는 커넥션으로부터 들어온 쿼리를 처리하는 과정
