@@ -6,6 +6,10 @@ PostgreSQL은 클라이언트-서버 모델을 사용
 - 서버: 하나의 데이터베이스 클러스터를 운영하는 프로세스 집합이 되는 PostgreSQL 서버
 
 # Process
+
+![process_architecture](./process_architecture.png)  
+[image reference](https://dev.to/fatemasamir/exploring-the-process-and-memory-architecture-of-postgresql-chapter-2-1997)
+
 - postgres
 - postgres: checkpointer
 - postgres: background writer
@@ -70,6 +74,9 @@ PostgreSQL 서버 시작 시, 최초로 생성되는 데이터베이스 서버 �
 
 # Memory
 
+![memory_architecture](./memory_architecture1.png)  
+[image reference](https://dev.to/fatemasamir/exploring-the-process-and-memory-architecture-of-postgresql-chapter-2-1997)
+
 - 로컬 메모리: 백엔드 프로세스들이 용도에 따라 독자적으로 가지는 메모리 영역  
     - Work memory  
         Executor에서 Sort와 Hash 수행 시, Temp 파일을 사용전 접근하는 메모리  
@@ -88,6 +95,9 @@ PostgreSQL 서버 시작 시, 최초로 생성되는 데이터베이스 서버 �
         - 디스크에서 읽을 경우 성능 저하가 발생할 수 있기 때문에 로컬 메모리로 사용
     - Optimizer & Executor  
         Planner와 Executor에서 쿼리 수행 최적 플랜 계산할 때 사용하는 메모리  
+
+![memory_architecture2](./memory_architecture2.png)  
+[image reference](https://www.instaclustr.com/blog/postgresql-architecture/)
 
 - 공유 메모리(Shared Memory Area): 데이터베이스 클러스터 하나 당 전 영역에 공유하는 메모리 영역  
     - Commit Log (CLOG) Buffer: 각 트랜잭션 상태 정보 캐싱하는 공간
