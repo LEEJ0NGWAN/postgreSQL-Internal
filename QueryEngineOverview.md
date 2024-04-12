@@ -16,8 +16,6 @@
 `Parse Node`라는 구조체로 이루어진 Tree;  
 `Parse Node`는 해당 구문의 성격(INSERT, SELECT 등)에 따라 내용이 다르다
 
-`Parse Node`는 `Stmt` 라는 접미사로 끝나는 이름의 구조체로 SelectStmt 등이 있다
-
 ![parse_node](./parse_node.png)
 [image reference](https://levelup.gitconnected.com/query-processor-in-postgresql-c1c23cca20cf)
 
