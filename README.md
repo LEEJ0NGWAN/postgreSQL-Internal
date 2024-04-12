@@ -1,7 +1,6 @@
-# PostgreSQL
+# PostgreSQL Internal
 
-postgreSQL데이터베이스를 공부하는 레포지토리  
-
+![dark postgres](./dark_postgres.png)
 
 - [DataLayout](./DataLayout.md)
-
+- [ProcessAndMemoryArchitecture](./ProcessAndMemoryArchitecture.md)
