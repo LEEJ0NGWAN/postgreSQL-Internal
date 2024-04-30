@@ -35,6 +35,8 @@ Concurrency Control를 구현하는 방식은 크게 다음과 같다
 
 # Transaction ID
 ![txid](./txid.png)  
+[image reference](https://www.interdb.jp/pg/pgsql05/01.html)  
+
 - Transaction Manager가 할당하는 유니크 식별자로, 트랜잭션이 시작할때 발급  
 - PostgreSQL의 txid는 32비트 unsigned integer (약 42억)  
 - txid_current() 함수로 현재 txid 조회 가능  
