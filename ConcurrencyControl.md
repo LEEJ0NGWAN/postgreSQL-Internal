@@ -66,3 +66,25 @@ loop되는 txid 할당 구조에서, 과거 txid에서 저장한 데이터가 �
 
 ![freeze_process](./freeze_process.png)  
 [image reference](https://www.interdb.jp/pg/pgsql05/10.html)  
+
+# Tuple Structure
+테이블 정보를 담는 Heap 파일 및 페이지에 저장되는 Tuple은 크게 2가지로 나뉜다
+- Data Tuple  
+    HeapTypleHeaderData 구조체, NULL bitmap, user data로 구성된 페이지에 저장되는 튜플  
+    ![tuple_structure](./tuple_structure.png)  
+    [image_reference](https://www.interdb.jp/pg/pgsql05/02.html)  
+
+    - t_xmin: 해당 튜플을 삽입했던 트랜잭션의 txid를 저장  
+    - t_xmax: 해당 튜플을 삭제, 갱신한 트랜잭션의 txid를 저장; 만약 삭제, 갱신한 적이 없으면 0(INVALID txid)를 설정  
+    - t_cid: 현재 트랜잭션의 커맨드 실행 전까지 진행된 누적 커맨드 실행 개수
+    - t_ctid: 최신버전 또는 현재 튜플의 식별자 id;  
+        만약 현재 튜플이 업데이트 되면, 현재 튜플이 가리키는 t_ctid 값은 최신버전의 튜플의 id로 설정됨;  
+        만약 현재 튜플이 최신버전 튜플이라면, 현재 튜플의 t_ctid로 설정
+
+- TOAST Tuple  
+    **TOAST?**
+    - PostgreSQL에서 대용량 필드 데이터를 효율적으로 저장하기 위한 기술  
+    - 한 페이지의 용량보다 큰 튜플을 저장할 수 없기 때문에, 페이지 용량 임계점(TOAST_TUPLE_THRESHOLD; default 2kb)을 초과하면 튜플 압축을 시도  
+    - 만약 압축해도 임계점을 초과하면, 물리적으로 여러 row로 분할 및 기존 테이블 대신 TOAST 테이블로 분할하여 저장  
+    - 기존 테이블에는 TOAST 테이블에 저장된 분할 로우들을 가리키는 포인터를 저장
+
