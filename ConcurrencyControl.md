@@ -125,3 +125,21 @@ txid=100 트랜잭션 내부에는 업데이트 쿼리가 총 2개 있다
 
 txid=100 트랜잭션 commit 후,
 Tuple_1과 Tuple_2는 논리적으로 제거된 상태(Dead Tuple)가 되어, Vacuum 대상이 된다
+
+# Commit Log (CLOG)
+- 진행 중인 트랜잭션들의 상태를 보관하는 로그
+- 8kb 페이지 단위로 shared memory에 저장
+- 트랜잭션 처리 전반에 걸쳐 사용
+- 배열로 구성되어 있고, 배열의 각 인덱스는 txid를 차용한다
+- PostgreSQL가 셧다운 되거나 체크포인트 프로세스가 수행될 때 clog가 `pg_xact` 서브 디렉토리에 저장됨
+- 각 파일은 0000부터 시작하는 파일이름으로 최대 256kb 바이트 저장하며, 256kb 초과시 순차적으로 숫자를 증가시킨다(0000, 0001, ...)
+- clog의 크기는 페이지를 append하며 점진적으로 증가한다; 이는 Vacuum processing을 통해 주기적으로 clog 페이지와 파일을 삭제하며 정리할 수 있다
+
+### Transaction Status
+- IN_PROGRESS
+- COMMITTED
+- ABORTED
+- SUB_COMMITTED (서브 트랜잭션에 관한 상태)
+
+트랜잭션이 시작하면 IN_PROGRESS 상태가 되고, 트랜잭션이 **COMMIT** 또는 **ABORT** 명령을 수행하면 COMMITTED, ABORTED로 상태값이 업데이트 된다
+
