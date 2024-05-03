@@ -77,9 +77,11 @@ loop되는 txid 할당 구조에서, 과거 txid에서 저장한 데이터가 �
     - t_xmin: 해당 튜플을 삽입했던 트랜잭션의 txid를 저장  
     - t_xmax: 해당 튜플을 삭제, 갱신한 트랜잭션의 txid를 저장; 만약 삭제, 갱신한 적이 없으면 0(INVALID txid)를 설정  
     - t_cid: 현재 트랜잭션의 커맨드 실행 전까지 진행된 누적 커맨드 실행 개수
-    - t_ctid: 최신버전 또는 현재 튜플의 식별자 id;  
-        만약 현재 튜플이 업데이트 되면, 현재 튜플이 가리키는 t_ctid 값은 최신버전의 튜플의 id로 설정됨;  
-        만약 현재 튜플이 최신버전 튜플이라면, 현재 튜플의 t_ctid로 설정
+    - t_ctid  
+        - 최신버전 또는 현재 튜플의 식별자 id  
+        - 만약 현재 튜플이 업데이트 되면, 현재 튜플이 가리키는 t_ctid 값은 최신버전의 튜플의 id로 설정됨  
+        - 만약 현재 튜플이 최신버전 튜플이라면, 현재 튜플의 t_ctid로 설정  
+        - (page번호, Line Pointer) 쌍으로 이루어져 있음
 
 - TOAST Tuple  
     **TOAST?**
@@ -88,3 +90,38 @@ loop되는 txid 할당 구조에서, 과거 txid에서 저장한 데이터가 �
     - 만약 압축해도 임계점을 초과하면, 물리적으로 여러 row로 분할 및 기존 테이블 대신 TOAST 테이블로 분할하여 저장  
     - 기존 테이블에는 TOAST 테이블에 저장된 분할 로우들을 가리키는 포인터를 저장
 
+# INSERT, DELETE, UPDATE Tuples
+### Insertion
+새로운 튜플을 삽입하면 신규 튜플의 각 튜플 헤더 데이터는 다음과 같이 설정된다  
+- t_xmin: 현재 튜플 삽입을 진행하는 트랜잭션의 id
+- t_xmax: 최초 삽입이므로 이전에 갱신, 삭제한 트랜잭션 id는 0(invalid)
+- t_cid: 최초 삽입이므로 이전에 실행된 쿼리 커맨드는 0개
+- t_ctid: (최초 삽입 튜플의 페이지 번호, 최초 삽입 튜플의 line pointer)
+
+### Deletion
+기존 튜플을 삭제하면 기존 튜플의 튜플 헤더 데이터는 다음과 같이 설정된다
+- t_xmax: 삭제를 진행한 트랜잭션의 id로 업데이트  
+
+삭제를 진행하는 트랜잭션이 commit 된 후, 필요없게 된 해당 튜플은 **Dead Tuple**로 간주된다  
+**Auto Vacuum**에 의해서 Dead Tuple은 주기적으로 정리된다  
+
+### Update  
+업데이트는 최신 버전의 튜플 데이터가 페이지에 추가되고, 기존 버전의 튜플이 논리적 제거(데드 튜플로써 추후 Vacuum 대상)가 이루어진다  
+
+- 기존 튜플
+    - t_xmax: 신규 튜플의 txid
+    - t_ctid: (신규 튜플의 page 번호, 신규 튜플의 line pointer)
+- 신규 튜플
+    - t_xmin: 해당 튜플의 txid
+    - t_xmax: 0
+    - t_cid: (업데이트가 일어난 현재 트랜잭션에서 이전에 실행된 쿼리 개수)
+    - t_ctid: (해당 튜플의 page 번호, 해당 튜플의 line pointer)
+
+![tuple_update](./tuple_update.png)  
+[image reference](https://www.interdb.jp/pg/pgsql05/03.html)  
+txid=99 트랜잭션에서 삽입된 어떤 레코드가 txid=100 트랜잭션을 거치면서 업데이트 되는 과정 예시;  
+txid=100 트랜잭션 내부에는 업데이트 쿼리가 총 2개 있다  
+이 예시의 트랜잭션에 따라 추가된 힙 튜플들이 저장된 페이지의 번호는 0번이며, Line Pointer는 1번부터 시작하는 것을 가정한다  
+
+txid=100 트랜잭션 commit 후,
+Tuple_1과 Tuple_2는 논리적으로 제거된 상태(Dead Tuple)가 되어, Vacuum 대상이 된다
