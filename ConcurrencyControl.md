@@ -23,9 +23,10 @@ Concurrency Control를 구현하는 방식은 크게 다음과 같다
     신규 데이터는 그냥 직접적으로 관련 테이블의 페이지에 저장된다  
     데이터 아이템 조회 시, 각각 트랜잭션에 대해 적합한 버전의 아이템을 조회  
 
-- SI는 ANSI SQL-92 표준 3가지 이상 동작 (Dirty Reads, Non-Repeatable Reads, Phantom Reads)를 허용하지 않으나, serialization 이상동작(Write Skew, Read-Only Transaction Skew)을 허용하기 때문에 진정한 의미의 Serializability를 실현하진 않는다  
+- PostgreSQL이 구현한 SI는 ANSI SQL-92 표준 3가지 이상 동작 (Dirty Reads, Non-Repeatable Reads, Phantom Reads)를 허용하지 않으나, serialization 이상동작(Write Skew, Read-Only Transaction Skew)을 허용하기 때문에 진정한 의미의 Serializability를 실현하진 않는다  
+    (**즉, Serializable 레벨에서 Serialization Anomaly 가 일어날 수도 있다**)
 
-- 이런 이슈를 대처하기 위해, 9.1 버전부터 Serializable Snapshot Isolation(SSI)가 추가되었다  
+- 이런 이슈를 대처하기 위해, PostgreSQL 9.1 버전부터 Serializable Snapshot Isolation(SSI)가 추가되었다  
 
     **Serializable Snapshot Isolation(SSI)**  
     - serialization 이상동작을 감지
@@ -143,3 +144,163 @@ Tuple_1과 Tuple_2는 논리적으로 제거된 상태(Dead Tuple)가 되어, Va
 
 트랜잭션이 시작하면 IN_PROGRESS 상태가 되고, 트랜잭션이 **COMMIT** 또는 **ABORT** 명령을 수행하면 COMMITTED, ABORTED로 상태값이 업데이트 된다
 
+# Transaction Snapshot
+- 각 트랜잭션의 특정 시점에 활성화 중인 모든 트랜잭션들의 상태에 대한 정보를 담고 있는 것
+- **PostgreSQL이 MVCC를 구현하기 위해 사용하는 Visibility Check를 위해 활용**  
+- xmin:xmax:xip_list 형태로 표현되며 각 txid는 다음과 같은 뜻을 내포  
+    ![transaction_snapshot_architecture](./transaction_snapshot_architecture.png)  
+    [image reference](https://www.interdb.jp/pg/pgsql05/05.html) (snapshot 표현식 예시)  
+    - xmin: xmin 미만의 id값을 가지는 트랜잭션들은 전부 visible이며 not active
+    - xmax: xmax 이상의 id값을 가지는 트랜잭션들은 전부 invisible
+    - xip_list: xmin과 xmax 사이의 active한 트랜잭션 id 리스트
+- 스냅샷은 격리 레벨에 따라 제공되는 주기가 다르다  
+    - READ COMMITTED: 트랜잭션 안에서 sql 커맨드가 실행될 때마다 스냅샷 획득
+    - REPEATABLE READ, SERIALIZABLE: 트랜잭션 안에서 첫번째 sql 커맨드 실행될 때만 획득
+- 스냅샷으로 visibility check를 수행할 때, 스냅샷 내부에서 활성 중으로 인식된 트랜잭션은 실제로 이미 committed나 aborted 되었더라도, 아직 스냅샷과 동일하게 진행중(활성중)으로 인지되어야 한다  
+    READ COMMITTED, REPEATABLE READ, SERIALIZABLE 모든 격리 레벨에서 visibility check가 다르게 동작하는 것을 고려해야 하기 때문  
+
+![transaction_snapshot_example](./transaction_snapshot_example.png)  
+[image reference](https://www.interdb.jp/pg/pgsql05/05.html)  
+(각기 다른 격리 레벨을 가진 트랜잭션들의 스냅샷 할당 상태에 대한 예시)  
+
+# Visibility Check Rules
+- Visibility Check를 수행하기 위해 사용되는 Rule 집합
+- 트랜잭션 스냅샷, clog, 튜플의 t_xmin, t_xmax를 사용하여 각기 데이터 튜플이 현재 트랜잭션에서 visible인지 invisible인지 판단
+
+### 대표적인 10가지 Vibility Check Rules
+1. if t_xmin == ABORTED --> Invisible  
+    ABORTED 된 트랜잭션에 의해 생긴 튜플이면 Invisible  
+
+**if t_xmin == IN_PROGRESS &&**
+
+2. t_xmin == current_txid && t_xmax == INVALID --> Visible  
+    현재 작업 진행중인 트랜잭션에서 최초로 생성된 튜플이면 해당 트랜잭션 내부에서는 Visible  
+
+3. t_xmin == current_txid && t_xmax != INVALID --> Invisible  
+    현재 작업 진행중인 트랜잭션에서 최초로 생성된 튜플인데 추가 수정이나 삭제가 되었다면, Invisible  
+
+4. t_xmin != current_txid --> Invisible  
+    현재 작업 진행중인 트랜잭션에서 생성된 튜플은 해당 트랜잭션 내부가 아니면, Invisible  
+
+**if t_xmin == COMMITTED &&**
+
+5. t_xmin is active in snapshot --> Invisible  
+    커밋 완료 튜플이지만, 스냅샷 내부에 아직 튜플 생성 트랜잭션이 활성화로 있다면 Invisible  
+
+6. (t_xmax == INVALID || t_xmax == ABORTED) --> Visible  
+    커밋 완료 튜플이 변경 및 삭제된 내역이 없다면 Visible  
+
+7. t_xmax == IN_PROGRESS && t_xmax == current_txid --> Invisible  
+    커밋 완료 튜플을 변경 및 삭제중인 트랜잭션 내부는 Invisible  
+
+8. t_xmax == IN_PROGRESS && t_xmax != current_txid --> Visible  
+    커밋 완료 튜플을 변경 및 삭제중인 트랜잭션 외부는 Visible  
+
+9. t_xmax == COMMITTED && t_xmax is active in snapshot --> Visible  
+    커밋 완료 튜플의 갱신을 커밋했지만, 스냅샷 내부에 갱신 트랜잭션이 활성화로 있다면 Visible  
+
+10. t_xmax == COMMITTED && t_xmax is inactive --> Invisible  
+    커밋 완료 튜플의 갱신을 커밋했고, 스냅샷 내부에 해당 갱신 트랜잭션이 없다면 Invisible  
+
+# Visibility Check
+PostgreSQL은 위에 언급한 Visibility Check Rules를 이용하여, 특정 버전의 튜플을 조회 시 Visible 한지, Invisible 한지 체크하여 각 트랜잭션마다 각기 버전이 다른 튜플을 보여줌으로써 MVCC를 구현할 수 있다  
+
+![visibility_check_example](./visibility_check_example.png)  
+[image reference](https://www.interdb.jp/pg/pgsql05/07.html)  
+위 예시에서 각 시간대 별로 다음과 같은 Rule을 적용하여 Visiblity를 판단한다  
+- T3  
+    **Visibility(Tuple_1)** `Rule6`  
+    = t_xmin == COMMITTED && t_xmax == INVALID  
+    = Visible  
+
+- T5  
+    - txid = 200  
+        - **Visibility(Tuple_1)** `Rule7`  
+            = t_xmin == COMMITTED && t_xmax == IN_PROGRESS && t_xmax == current_txid  
+            = Invisibile  
+
+        - **Visibility(Tuple_2)** `Rule2`  
+            = t_xmin == IN_PROGRESS && t_xmin == current_txid && t_xmax == INVALID  
+            = Visible  
+    - txid = 201  
+        - **Visibility(Tuple_1)** `Rule8`  
+            = t_xmin == COMMITTED && t_xmax == IN_PROGRESS && t_xmax != current_txid  
+            = Visibile  
+
+        - **Visibility(Tuple_2)** `Rule4`  
+            = t_xmin == IN_PROGRESS && t_xmin != current_txid  
+            = Invisible  
+
+- T7
+    - isolation level == READ_COMMITTED  
+        - **Visibility(Tuple_1)** `Rule10`  
+            = t_xmin == COMMITTED && t_xmax == COMMITTED && snapshot(t_xmax) != active  
+            = Invisible  
+
+        - **Visibility(Tuple_2)** `Rule6`  
+            = t_xmin == COMMITTED && t_xmax == INVALID  
+            = Visible  
+    - isolation level == REPEATABLE_READ  
+        - **Visibility(Tuple_1)** `Rule9`  
+            = t_xmin == COMMITTED && t_xmax == COMMITTED && snapshot(t_xmax) == active  
+            = Visibile  
+
+        - **Visibility(Tuple_2)** `Rule5`  
+            = t_xmin == COMMITTED && snapshot(t_xmax) == active  
+            = Invisible  
+
+# Preventing Lost Updates
+**Lost Update(같은 로우를 서로 다른 트랜잭션이 동시에 갱신하려고 할 때 발생하는 이상 동작)** 를 PostgreSQL은 Update 쿼리 실행 시 수행하는 함수 내부 로직을 통해 방지한다  
+
+UPDATE 쿼리 내부 ExecUpdate 함수의 수도코드  
+[reference](https://www.interdb.jp/pg/pgsql05/08.html)
+```
+(1)   FOR each row that will be updated by this UPDATE command
+(2)        WHILE true
+
+                /*
+                 * The First Block
+                 */
+(3)             IF the target row is 'being updated' THEN
+(4)	             WAIT for the termination of the transaction that updated the target row
+
+(5)                  IF (the status of the terminated transaction is COMMITTED)
+   	               AND (the isolation level of this transaction is REPEATABLE READ or SERIALIZABLE) THEN
+(6)	                  ABORT this transaction  /* First-Updater-Win */
+                     ELSE 
+(7)                       GOTO step (2)
+                     END IF
+
+                /*
+                 * The Second Block
+                 */
+(8)             ELSE IF the target row has been updated by another concurrent transaction THEN
+(9)                  IF (the isolation level of this transaction is READ COMMITTED THEN
+(10)                      UPDATE the target row
+                     ELSE
+(11)                      ABORT this transaction  /* First-Updater-Win */
+                     END IF
+
+                /*
+                 * The Third Block
+                 */
+                ELSE  /* The target row is not yet modified               */
+                      /* or has been updated by a terminated transaction. */
+(12)                  UPDATE the target row
+                END IF
+           END WHILE 
+      END FOR 
+```
+
+# Serializable Snapshot Isolation
+- PostgreSQL의 기존 SI가 serializable 격리 레벨에서 발생하면 안되는 Serialization Anomaly 문제를 해결하기 위해 9.1버전부터 도입
+- Precedence Graph를 사용하여 두 트랜잭션 간 rw-conflict가 싸이클을 이루는지 검증 및 싸이클 생성 시 First Commit winner 정책을 바탕으로 뒤늦게 rw-conflict를 발생 시키는 트랜잭션을 ABORT 시킴
+
+### SIREAD lock
+postgreSQL 객체(tuple, pk 등..)와 현재 해당 객체를 참조하려는 트랜잭션들을 쌍으로 구성하는 Lock 객체  
+    e.g.,  
+    {Tuple_1, {100}}: Tuple_1 객체에 현재 txid=100인 트랜잭션이 접근하려고 한다  
+    {Tuple_2, {100,101}}: Tuple_2 객체에 현재 100,101 트랜잭션이 접근하려고 한다 
+
+### rw-conflicts
+SIREAD lock 내부에 트랜잭션들 간에 precedence Graph 작성 후, rw-conflict 현상 발생 시 rw-conflict 객체를 생성 한다
