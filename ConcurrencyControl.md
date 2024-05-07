@@ -1,3 +1,5 @@
+[돌아가기](https://github.com/LEEJ0NGWAN/postgreSQL-Internal)
+
 # Concurrency Control
 Concurrency Control은 ACID에 해당하는 **Atomicity**, **Isolation** 을 관리하는 메커니즘  
 
