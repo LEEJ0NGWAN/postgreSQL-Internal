@@ -5,5 +5,5 @@
 - [DataLayout](./DataLayout.md)
 - [ProcessAndMemoryArchitecture](./ProcessAndMemoryArchitecture.md)
 - [QueryEngineOverview](./QueryEngineOverview.md)
-- [MVCC](./ConcurrencyControl.md)
+- [ConcurrencyControl](./ConcurrencyControl.md)
 - [VacuumProcessing](./VacuumProcessing.md)
